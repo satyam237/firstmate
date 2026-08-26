@@ -48,6 +48,8 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-$FM_ROOT}"
+# shellcheck source=bin/fm-lavish-lib.sh disable=SC1091
+. "$SCRIPT_DIR/fm-lavish-lib.sh"
 
 TEMPLATE="${FM_BEARINGS_BOARD_TEMPLATE:-$SCRIPT_DIR/../.agents/skills/bearings/assets/board-template.html}"
 PLACEHOLDER='__FM_BEARINGS_BOARD_DATA__'
@@ -135,6 +137,8 @@ validate_payload() {  # <data.json>
 command_build() {
   local data=${1-} board json tmp sid extracted
   [ "$#" -eq 1 ] || { usage >&2; exit 2; }
+  fm_lavish_disabled "$FM_HOME" \
+    && fail "Lavish is disabled by config/lavish-disabled; use the chat digest instead"
   command -v jq >/dev/null 2>&1 || fail "jq is required"
   [ -f "$data" ] || fail "board data does not exist: $data"
   jq empty "$data" 2>/dev/null || fail "board data is not valid JSON: $data"

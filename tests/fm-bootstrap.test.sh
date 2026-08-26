@@ -12,8 +12,8 @@
 # tasks-axi update advertises --archive-body, whether its mv help advertises
 # multi-ID moves, whether quota-axi is on PATH,
 # whether the local backend config opts out of tasks-axi backlog mutations,
-# which no-mistakes version is on PATH, which gh-axi version is on PATH, and
-# which lavish-axi version is on PATH.
+# which no-mistakes version is on PATH, which gh-axi version is on PATH, which
+# lavish-axi version is on PATH, and whether config/lavish-disabled opts out.
 # Dedicated fleet-sync cases pin the computed bootstrap timeout, explicit
 # override, blank-env defaulting, partial-output relay, and pre-launch timeout
 # scan.
@@ -401,6 +401,43 @@ much older lavish-axi minor reports an upgrade^0.0.9^missing
 unparseable lavish-axi version reports an upgrade^lavish-axi development build^missing
 ROWS
   pass "bootstrap enforces lavish-axi minimum version"
+}
+
+test_lavish_disabled_opt_out() {
+  local case_dir fakebin out rc marker
+  case_dir="$TMP_ROOT/lavish-disabled"
+  mkdir -p "$case_dir/home/config"
+  printf '%s\n' manual > "$case_dir/home/config/backlog-backend"
+  : > "$case_dir/home/config/lavish-disabled"
+  fakebin=$(make_fake_toolchain "$case_dir")
+  rm -f "$fakebin/lavish-axi"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  [ -z "$out" ] || fail "lavish-disabled presence flag still required lavish-axi: $out"
+
+  rm -f "$case_dir/home/config/lavish-disabled"
+  ln -s "$case_dir/missing-opt-out-target" "$case_dir/home/config/lavish-disabled"
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
+  [ -z "$out" ] || fail "a dangling lavish-disabled flag enabled lavish-axi: $out"
+
+  marker="$case_dir/npm-called"
+  cat > "$fakebin/npm" <<'SH'
+#!/usr/bin/env bash
+: > "$FM_FAKE_NPM_MARKER"
+exit 0
+SH
+  chmod +x "$fakebin/npm"
+  set +e
+  out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
+    FM_FAKE_NPM_MARKER="$marker" "$ROOT/bin/fm-bootstrap.sh" install lavish-axi 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "lavish-disabled allowed the bootstrap installer"
+  assert_contains "$out" "disabled by config/lavish-disabled" \
+    "lavish-disabled installer refusal did not name the opt-out: $out"
+  assert_absent "$marker" "lavish-disabled installer refusal still invoked npm"
+  pass "lavish-disabled suppresses requirements and refuses installation"
 }
 
 test_tasks_axi_min_version() {
@@ -1148,6 +1185,7 @@ ROWS
   pass "bootstrap validates crew-dispatch.json and reports malformed or unverified configs"
 }
 
+test_lavish_disabled_opt_out
 test_bootstrap_reporting
 test_no_mistakes_min_version
 test_gh_axi_min_version

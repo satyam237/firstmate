@@ -545,6 +545,45 @@ assert_absent "$FM_PROCEVENT_CLAIM_ROOT/retire-fail-src.claim" \
   || fail "retirement recovery reran the terminal source"
 pass "failed terminal retirement is fail-closed and idempotently recoverable"
 
+# --- home-local Lavish opt-out refuses registration and polling ------------
+# The presence flag is a browser-safety boundary, so both entry points refuse
+# before registering a source or invoking even an accidentally installed tool.
+HDISABLED="$TMP_ROOT/lavish-disabled"; new_home "$HDISABLED"
+mkdir -p "$HDISABLED/config"
+: > "$HDISABLED/config/lavish-disabled"
+LAVISH_DISABLED_BIN=$(fm_fakebin "$TMP_ROOT/lavish-disabled-stub")
+LAVISH_DISABLED_MARKER="$TMP_ROOT/lavish-disabled-called"
+export LAVISH_DISABLED_MARKER
+cat > "$LAVISH_DISABLED_BIN/lavish-axi" <<'SH'
+#!/usr/bin/env bash
+: > "$LAVISH_DISABLED_MARKER"
+exit 0
+SH
+chmod +x "$LAVISH_DISABLED_BIN/lavish-axi"
+LAVISH_DISABLED_ART="$TMP_ROOT/lavish-disabled.html"
+printf '<h1>disabled</h1>\n' > "$LAVISH_DISABLED_ART"
+lavish_disabled_id=$("$ROOT/bin/fm-procevent-lavish.sh" source-id "$LAVISH_DISABLED_ART")
+set +e
+out=$(PATH="$LAVISH_DISABLED_BIN:$PATH" FM_HOME="$HDISABLED" \
+  "$ROOT/bin/fm-procevent-lavish.sh" arm "$LAVISH_DISABLED_ART" 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || fail "lavish-disabled allowed source registration"
+assert_contains "$out" "disabled by config/lavish-disabled" \
+  "lavish-disabled arm refusal did not name the opt-out"
+assert_absent "$HDISABLED/state/procevent/$lavish_disabled_id.source" \
+  "lavish-disabled registered a poll source"
+set +e
+out=$(PATH="$LAVISH_DISABLED_BIN:$PATH" FM_HOME="$HDISABLED" \
+  "$ROOT/bin/fm-procevent-lavish.sh" poll "$LAVISH_DISABLED_ART" 2>&1)
+rc=$?
+set -e
+[ "$rc" -ne 0 ] || fail "lavish-disabled allowed direct polling"
+assert_contains "$out" "disabled by config/lavish-disabled" \
+  "lavish-disabled poll refusal did not name the opt-out"
+assert_absent "$LAVISH_DISABLED_MARKER" "lavish-disabled still invoked lavish-axi"
+pass "lavish-disabled refuses source registration and polling before tool invocation"
+
 # --- end-user-aligned regression: one Send & End, one captured result -------
 # The dogfood defect: a real armed Lavish source received one human `Send & End`
 # action, and the runner captured four results - the human's real feedback, then

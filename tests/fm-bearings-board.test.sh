@@ -112,6 +112,33 @@ test_path_is_stable_and_home_scoped() {
   pass "path prints the stable home-scoped board location"
 }
 
+test_build_refuses_when_lavish_is_disabled_before_launching_or_writing() {
+  local home data marker out rc
+  home=$(make_home disabled)
+  mkdir -p "$home/config"
+  : > "$home/config/lavish-disabled"
+  data="$home/payload.json"
+  marker="$home/lavish-called"
+  write_valid_payload "$data"
+  cat > "$home/fakebin/lavish-axi" <<'SH'
+#!/usr/bin/env bash
+: > "$FM_FAKE_LAVISH_MARKER"
+exit 0
+SH
+  chmod +x "$home/fakebin/lavish-axi"
+  set +e
+  out=$(FM_FAKE_LAVISH_MARKER="$marker" run_board "$home" build "$data" 2>&1)
+  rc=$?
+  set -e
+  [ "$rc" -ne 0 ] || fail "lavish-disabled allowed a board build"
+  assert_contains "$out" "disabled by config/lavish-disabled" \
+    "the disabled board refusal did not name the opt-out: $out"
+  assert_absent "$marker" "lavish-disabled still launched lavish-axi"
+  assert_absent "$home/.lavish/bearings-board.html" \
+    "lavish-disabled still wrote the browser-backed board"
+  pass "lavish-disabled refuses board creation before launching or writing"
+}
+
 test_build_refuses_malformed_payloads_before_touching_the_board() {
   local home data board rc out
   home=$(make_home refusal)
@@ -371,6 +398,7 @@ test_build_refuses_a_template_without_exactly_one_slot() {
 }
 
 test_path_is_stable_and_home_scoped
+test_build_refuses_when_lavish_is_disabled_before_launching_or_writing
 test_build_refuses_malformed_payloads_before_touching_the_board
 test_build_injects_binds_then_arms
 test_registration_cannot_consume_before_any_origin_binding
